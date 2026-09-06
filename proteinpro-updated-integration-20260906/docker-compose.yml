@@ -1,0 +1,315 @@
+name: proteinpro
+
+networks:
+  proteinpro-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  mongodb-data:
+  kafka-data:
+  sonar-data:
+  sonar-extensions:
+  sonar-logs:
+
+services:
+  # ----------------------------------------------------
+  # Infrastructure Services
+  # ----------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      AUTH_MYSQL_USERNAME: ${AUTH_MYSQL_USERNAME:-proteinpro_auth}
+      AUTH_MYSQL_PASSWORD: ${AUTH_MYSQL_PASSWORD:?Set AUTH_MYSQL_PASSWORD in .env}
+      USER_PROFILE_MYSQL_USERNAME: ${USER_PROFILE_MYSQL_USERNAME:-proteinpro_profile}
+      USER_PROFILE_MYSQL_PASSWORD: ${USER_PROFILE_MYSQL_PASSWORD:?Set USER_PROFILE_MYSQL_PASSWORD in .env}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/init-mysql.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    networks:
+      - proteinpro-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot --password=\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  mongodb:
+    image: mongo:7.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - proteinpro-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  kafka:
+    image: apache/kafka:3.9.2
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    networks:
+      - proteinpro-network
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+
+  protein-api:
+    image: stackroutenew/proteinapi
+    restart: unless-stopped
+    ports:
+      - "3232:3232"
+    networks:
+      - proteinpro-network
+
+  # ----------------------------------------------------
+  # Core System Management Microservices
+  # ----------------------------------------------------
+  config-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        MODULE: config-server
+        SERVICE_PORT: 8888
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      PROTEIN_API_BASE_URL: http://protein-api:3232
+      AUTH_MYSQL_URL: jdbc:mysql://mysql:3306/authentication_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      USER_PROFILE_MYSQL_URL: jdbc:mysql://mysql:3306/user_profile_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    networks:
+      - proteinpro-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8888/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  discovery-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        MODULE: discovery-server
+        SERVICE_PORT: 8761
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+    depends_on:
+      config-server:
+        condition: service_healthy
+    networks:
+      - proteinpro-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # ----------------------------------------------------
+  # Domain Microservices
+  # ----------------------------------------------------
+  authentication-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        MODULE: authentication-service
+        SERVICE_PORT: 8081
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      AUTH_MYSQL_URL: jdbc:mysql://mysql:3306/authentication_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      AUTH_MYSQL_USERNAME: ${AUTH_MYSQL_USERNAME:-proteinpro_auth}
+      AUTH_MYSQL_PASSWORD: ${AUTH_MYSQL_PASSWORD:?Set AUTH_MYSQL_PASSWORD in .env}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - proteinpro-network
+
+  user-profile-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        MODULE: user-profile-service
+        SERVICE_PORT: 8082
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      USER_PROFILE_MYSQL_URL: jdbc:mysql://mysql:3306/user_profile_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      USER_PROFILE_MYSQL_USERNAME: ${USER_PROFILE_MYSQL_USERNAME:-proteinpro_profile}
+      USER_PROFILE_MYSQL_PASSWORD: ${USER_PROFILE_MYSQL_PASSWORD:?Set USER_PROFILE_MYSQL_PASSWORD in .env}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - proteinpro-network
+
+  protein-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        MODULE: protein-service
+        SERVICE_PORT: 8083
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      PROTEIN_API_BASE_URL: http://protein-api:3232
+    depends_on:
+      protein-api:
+        condition: service_started
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - proteinpro-network
+
+  bookmark-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        MODULE: bookmark-service
+        SERVICE_PORT: 8084
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      BOOKMARK_MONGODB_URI: mongodb://mongodb:27017/proteinpro_bookmarks
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - proteinpro-network
+
+  # ----------------------------------------------------
+  # Gateway & Frontend
+  # ----------------------------------------------------
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        MODULE: api-gateway
+        SERVICE_PORT: 8080
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    depends_on:
+      - discovery-server
+      - authentication-service
+      - user-profile-service
+      - protein-service
+      - bookmark-service
+    networks:
+      - proteinpro-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - proteinpro-network
+
+  sonarqube:
+    image: sonarqube:community
+    profiles: [quality]
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-extensions:/opt/sonarqube/extensions
+      - sonar-logs:/opt/sonarqube/logs
+    networks:
+      - proteinpro-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s

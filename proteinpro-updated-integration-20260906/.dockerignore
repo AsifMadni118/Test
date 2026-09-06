@@ -1,0 +1,11 @@
+.git
+.idea
+.vscode
+.env
+frontend/node_modules
+frontend/dist
+pdf-render
+work
+outputs
+*.zip
+

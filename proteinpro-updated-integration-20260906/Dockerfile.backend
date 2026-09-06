@@ -1,0 +1,8 @@
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+ARG MODULE
+ARG SERVICE_PORT
+COPY ${MODULE}/target/${MODULE}-1.0.0.jar app.jar
+EXPOSE ${SERVICE_PORT}
+ENTRYPOINT ["java", "-jar", "app.jar"]
+

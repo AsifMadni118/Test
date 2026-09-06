@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: authentication-service
+          uri: lb://AUTHENTICATION-SERVICE
+          predicates:
+            - Path=/api/auth/**
+        - id: user-profile-service
+          uri: lb://USER-PROFILE-SERVICE
+          predicates:
+            - Path=/api/profiles/**
+        - id: protein-service
+          uri: lb://PROTEIN-SERVICE
+          predicates:
+            - Path=/api/proteins/**
+        - id: bookmark-service
+          uri: lb://BOOKMARK-SERVICE
+          predicates:
+            - Path=/api/bookmarks/**
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: ${FRONTEND_ORIGIN:http://localhost:3000}
+            allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+            allowedHeaders: [Authorization, Content-Type]
+            exposedHeaders: []
+            allowCredentials: true

@@ -1,0 +1,15 @@
+server:
+  port: 8083
+
+spring:
+  cloud:
+    openfeign:
+      client:
+        config:
+          external-protein-api:
+            connect-timeout: 3000
+            read-timeout: 5000
+
+protein:
+  api:
+    base-url: ${PROTEIN_API_BASE_URL:http://protein-api:3232}

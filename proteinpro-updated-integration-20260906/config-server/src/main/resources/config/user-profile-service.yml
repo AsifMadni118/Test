@@ -1,0 +1,35 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: ${USER_PROFILE_MYSQL_URL:jdbc:mysql://mysql:3306/user_profile_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${USER_PROFILE_MYSQL_USERNAME}
+    password: ${USER_PROFILE_MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+  cloud:
+    openfeign:
+      client:
+        config:
+          authentication-service:
+            connect-timeout: 3000
+            read-timeout: 5000
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+  internal-api-key: ${INTERNAL_API_KEY}
+
+kafka:
+  topics:
+    user-created: user-created
+    user-updated: user-updated

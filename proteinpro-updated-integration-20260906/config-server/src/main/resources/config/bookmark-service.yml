@@ -1,0 +1,18 @@
+server:
+  port: 8084
+
+spring:
+  data:
+    mongodb:
+      uri: ${BOOKMARK_MONGODB_URI}
+      auto-index-creation: true
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+
+kafka:
+  topics:
+    bookmark-created: bookmark-created
+    bookmark-updated: bookmark-updated
+    bookmark-deleted: bookmark-deleted

@@ -1,0 +1,40 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: ${AUTH_MYSQL_URL:jdbc:mysql://mysql:3306/authentication_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${AUTH_MYSQL_USERNAME}
+    password: ${AUTH_MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+  kafka:
+    consumer:
+      group-id: authentication-service-user-events
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.proteinpro.auth.kafka
+        spring.json.value.default.type: com.proteinpro.auth.kafka.UserCreatedEvent
+        spring.json.use.type.headers: false
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:1800}
+  internal-api-key: ${INTERNAL_API_KEY}
+
+kafka:
+  topics:
+    user-created: user-created
+    authentication-events: authentication-events
+    password-reset-events: password-reset-events
