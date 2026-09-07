@@ -7,7 +7,7 @@ work
 outputs
 *.zip
 frontend/
-*/src/
+
 */target/classes/
 */target/test-classes/
 */target/generated-sources/
