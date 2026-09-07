@@ -5,3 +5,9 @@ target/
 .env
 logs/
 data/
+*.log
+*.zip
+scratch/
+node_modules/
+dist/
+

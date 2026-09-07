@@ -33,3 +33,27 @@ spring:
             allowedHeaders: [Authorization, Content-Type]
             exposedHeaders: []
             allowCredentials: true
+
+aggregator:
+  services:
+    - name: Authentication Service
+      service-id: authentication-service
+      gateway-prefix: api/auth
+    - name: User Profile Service
+      service-id: user-profile-service
+      gateway-prefix: api/profiles
+    - name: Protein Catalog Service
+      service-id: protein-service
+      gateway-prefix: api/proteins
+    - name: Bookmark Service
+      service-id: bookmark-service
+      gateway-prefix: api/bookmarks
+
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    url: /v3/api-docs/aggregated
+    operationsSorter: method
+    tagsSorter: alpha
+

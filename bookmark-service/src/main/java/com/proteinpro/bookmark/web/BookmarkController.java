@@ -4,6 +4,11 @@ import com.proteinpro.bookmark.dto.BookmarkDtos.BookmarkResponse;
 import com.proteinpro.bookmark.dto.BookmarkDtos.CreateBookmarkRequest;
 import com.proteinpro.bookmark.dto.BookmarkDtos.UpdateCommentRequest;
 import com.proteinpro.bookmark.service.BookmarkService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +27,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/bookmarks")
+@Tag(name = "Bookmarks", description = "Endpoints for managing user protein bookmarks and custom notes")
 public class BookmarkController {
     private final BookmarkService service;
 
@@ -31,27 +37,65 @@ public class BookmarkController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public BookmarkResponse create(@RequestAttribute("authenticatedUserId") String userId,
-                                   @Valid @RequestBody CreateBookmarkRequest request) {
+    @Operation(summary = "Create bookmark", description = "Bookmarks a protein item with a snapshot of its data and custom comment for the authenticated user")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Bookmark created successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid bookmark request payload"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - missing or invalid token"),
+            @ApiResponse(responseCode = "409", description = "Protein is already bookmarked by user")
+    })
+    public BookmarkResponse create(
+            @Parameter(hidden = true)
+            @RequestAttribute("authenticatedUserId") String userId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Bookmark creation payload", required = true)
+            @Valid @RequestBody CreateBookmarkRequest request) {
         return service.create(userId, request);
     }
 
     @GetMapping
-    public List<BookmarkResponse> findMine(@RequestAttribute("authenticatedUserId") String userId) {
+    @Operation(summary = "List user bookmarks", description = "Retrieves all protein bookmarks belonging to the authenticated user")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Bookmarks retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - missing or invalid token")
+    })
+    public List<BookmarkResponse> findMine(
+            @Parameter(hidden = true)
+            @RequestAttribute("authenticatedUserId") String userId) {
         return service.findMine(userId);
     }
 
     @PutMapping("/{bookmarkId}/comment")
-    public BookmarkResponse updateComment(@RequestAttribute("authenticatedUserId") String userId,
-                                          @PathVariable String bookmarkId,
-                                          @Valid @RequestBody UpdateCommentRequest request) {
+    @Operation(summary = "Update bookmark comment", description = "Modifies the note/comment attached to an existing bookmark")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Comment updated successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid comment format"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - missing or invalid token"),
+            @ApiResponse(responseCode = "404", description = "Bookmark not found or does not belong to user")
+    })
+    public BookmarkResponse updateComment(
+            @Parameter(hidden = true)
+            @RequestAttribute("authenticatedUserId") String userId,
+            @Parameter(description = "ID of the bookmark to update", example = "bm_98765")
+            @PathVariable String bookmarkId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Updated comment payload", required = true)
+            @Valid @RequestBody UpdateCommentRequest request) {
         return service.updateComment(userId, bookmarkId, request.comment());
     }
 
     @DeleteMapping("/{bookmarkId}")
-    public ResponseEntity<Void> delete(@RequestAttribute("authenticatedUserId") String userId,
-                                       @PathVariable String bookmarkId) {
+    @Operation(summary = "Delete bookmark", description = "Removes a bookmark belonging to the authenticated user")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Bookmark deleted successfully"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - missing or invalid token"),
+            @ApiResponse(responseCode = "404", description = "Bookmark not found or does not belong to user")
+    })
+    public ResponseEntity<Void> delete(
+            @Parameter(hidden = true)
+            @RequestAttribute("authenticatedUserId") String userId,
+            @Parameter(description = "ID of the bookmark to delete", example = "bm_98765")
+            @PathVariable String bookmarkId) {
         service.delete(userId, bookmarkId);
         return ResponseEntity.noContent().build();
     }
 }
+

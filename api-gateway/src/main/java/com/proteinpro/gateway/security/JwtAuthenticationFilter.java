@@ -64,7 +64,12 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private boolean isPublic(ServerHttpRequest request) {
         String path = request.getURI().getPath();
-        if (request.getMethod() == HttpMethod.OPTIONS || path.startsWith("/actuator/health")) {
+        if (request.getMethod() == HttpMethod.OPTIONS
+                || path.startsWith("/actuator")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs")
+                || path.equals("/swagger-ui.html")
+                || path.startsWith("/webjars")) {
             return true;
         }
         if (request.getMethod() == HttpMethod.POST
