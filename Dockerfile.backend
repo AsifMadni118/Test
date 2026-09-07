@@ -1,8 +1,32 @@
+FROM maven:3.9-eclipse-temurin-17-alpine AS builder
+
+WORKDIR /build
+
+ARG MODULE
+
+COPY pom.xml .
+
+COPY api-gateway/pom.xml api-gateway/pom.xml
+COPY authentication-service/pom.xml authentication-service/pom.xml
+COPY bookmark-service/pom.xml bookmark-service/pom.xml
+COPY config-server/pom.xml config-server/pom.xml
+COPY discovery-server/pom.xml discovery-server/pom.xml
+COPY protein-service/pom.xml protein-service/pom.xml
+COPY user-profile-service/pom.xml user-profile-service/pom.xml
+
+COPY ${MODULE} ${MODULE}
+
+RUN mvn -pl ${MODULE} -am clean package -DskipTests
+
 FROM eclipse-temurin:17-jre-alpine
+
 WORKDIR /app
+
 ARG MODULE
 ARG SERVICE_PORT
-COPY ${MODULE}/target/${MODULE}-1.0.0.jar app.jar
-EXPOSE ${SERVICE_PORT}
-ENTRYPOINT ["java", "-jar", "app.jar"]
 
+COPY --from=builder /build/${MODULE}/target/*.jar app.jar
+
+EXPOSE ${SERVICE_PORT}
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
